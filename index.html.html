@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>HAIL MARY</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; touch-action:none; }
+  html, body { width:100%; height:100%; background:#000; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+  #wrap {
+    position:relative;
+    width:360px; height:640px;
+    background:#000;
+    overflow:hidden;
+    border: 2px solid #222;
+  }
+  canvas { position:absolute; top:0; left:0; width:360px; height:640px; image-rendering:pixelated; }
+  #ui { position:absolute; top:0; left:0; width:360px; height:640px; pointer-events:none; }
+
+  @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+  * { font-family: 'Press Start 2P', monospace; }
+
+  /* SCANLINES */
+  #scanlines {
+    position:absolute; inset:0; pointer-events:none; z-index:200;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.15) 2px, rgba(0,0,0,0.15) 4px);
+  }
+
+  /* TITLE */
+  #title-screen {
+    position:absolute; inset:0; background:#000;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    z-index:150;
+  }
+  #title-screen h1 { font-size:22px; color:#ffdd00; text-shadow:3px 3px #ff8800; letter-spacing:2px; margin-bottom:6px; }
+  #title-screen .sub { font-size:7px; color:#8080ff; margin-bottom:50px; letter-spacing:2px; }
+  #title-screen .tap { font-size:8px; color:#fff; animation:blink 1s step-end infinite; }
+  @keyframes blink { 50%{opacity:0} }
+
+  /* DIALOG */
+  #dialog {
+    display:none; position:absolute;
+    bottom:145px; left:6px; right:6px;
+    background:#05051e; border:3px solid #4040ff;
+    padding:8px 10px; z-index:100; pointer-events:all;
+    min-height:80px;
+  }
+  #dlg-speaker { font-size:6px; color:#ffdd00; margin-bottom:5px; }
+  #dlg-text { font-size:6px; color:#d0d0ff; line-height:1.8; min-height:48px; }
+  #dlg-tap { font-size:5px; color:#6060cc; text-align:right; margin-top:3px; animation:blink 0.9s step-end infinite; }
+
+  /* HUD */
+  #hud { display:none; position:absolute; top:4px; left:6px; right:6px; pointer-events:none; z-index:90; }
+  .hrow { display:flex; align-items:center; gap:5px; margin-bottom:3px; }
+  .hlbl { font-size:4px; color:#888; width:54px; }
+  .htrk { flex:1; height:5px; background:#111; border:1px solid #333; }
+  .hfil { height:100%; transition:width 0.3s; }
+  #hf .hfil { background:#00ccff; }
+  #hd .hfil { background:#ff8800; }
+  #hs .hfil { background:#ffdd00; }
+  .hval { font-size:4px; color:#aaa; width:32px; text-align:right; }
+
+  /* DPAD */
+  #dpad {
+    display:none; position:absolute; bottom:6px; left:6px;
+    width:120px; height:120px; z-index:100; pointer-events:all;
+  }
+  .dpad-btn {
+    position:absolute; background:rgba(40,40,80,0.85);
+    border:2px solid #4040aa; border-radius:4px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:14px; color:#8888ff; user-select:none;
+    active-background: rgba(80,80,160,0.9);
+  }
+  .dpad-btn:active, .dpad-btn.pressed { background:rgba(80,80,160,0.95); border-color:#8080ff; }
+  #btn-up    { width:38px;height:38px; top:0;   left:41px; }
+  #btn-down  { width:38px;height:38px; bottom:0;left:41px; }
+  #btn-left  { width:38px;height:38px; top:41px;left:0;    }
+  #btn-right { width:38px;height:38px; top:41px;left:82px; }
+  #btn-center{ width:38px;height:38px; top:41px;left:41px; background:rgba(60,60,100,0.7); font-size:8px; color:#aaa; }
+
+  /* ACTION BUTTONS */
+  #action-btns {
+    display:none; position:absolute; bottom:6px; right:6px;
+    width:120px; height:120px; z-index:100; pointer-events:all;
+  }
+  .act-btn {
+    position:absolute; width:48px; height:48px;
+    background:rgba(40,40,80,0.85); border:2px solid #4040aa;
+    border-radius:50%; display:flex; align-items:center;
+    justify-content:center; font-size:7px; color:#fff; text-align:center;
+    line-height:1.4; user-select:none;
+  }
+  .act-btn:active, .act-btn.pressed { background:rgba(80,80,160,0.95); border-color:#ffdd00; color:#ffdd00; }
+  #btn-thrust { top:0; right:0; border-color:#ff8800; color:#ff8800; font-size:9px; }
+  #btn-thrust.pressed { background:rgba(100,40,0,0.9); border-color:#ffdd00; color:#ffdd00; }
+
+  /* TAP-TO-CONTINUE (dialog) */
+  #tap-continue {
+    display:none; position:absolute;
+    bottom:145px; left:0; right:0; height:85px;
+    z-index:101; pointer-events:all;
+  }
+
+  /* PUZZLE */
+  #puzzle {
+    display:none; position:absolute; inset:0;
+    background:rgba(0,0,0,0.92); z-index:120;
+    padding:10px 8px; overflow-y:auto; pointer-events:all;
+  }
+  #pz-title { font-size:7px; color:#ffdd00; text-align:center; margin-bottom:6px; }
+  #pz-desc { font-size:5px; color:#aaa; text-align:center; margin-bottom:10px; line-height:1.9; }
+  #pz-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:7px; margin-bottom:10px; }
+  .pz-cell {
+    border:2px solid #333; padding:8px 4px;
+    display:flex; flex-direction:column; align-items:center; gap:4px;
+    font-size:5px; color:#ccc; text-align:center; cursor:pointer;
+    background:rgba(10,10,30,0.8);
+  }
+  .pz-cell .picon { font-size:22px; line-height:1; }
+  .pz-cell.sel { border-color:#ffdd00; background:#111; }
+  .pz-cell.ok  { border-color:#00ff88; background:#002211; color:#00ff88; }
+  .pz-cell.err { border-color:#ff4444; background:#220000; }
+  #pz-fb { font-size:6px; color:#ffdd00; text-align:center; min-height:14px; margin-bottom:8px; }
+  #pz-confirm {
+    display:block; margin:0 auto;
+    font-family:'Press Start 2P',monospace; font-size:7px;
+    padding:9px 20px; background:#0a0a2e; border:2px solid #4040ff;
+    color:#fff; cursor:pointer; width:100%;
+  }
+  #pz-confirm:active { background:#1a1a5e; }
+
+  /* FINAL */
+  #final {
+    display:none; position:absolute; inset:0; background:#000;
+    flex-direction:column; align-items:center; justify-content:center;
+    z-index:160; padding:20px; text-align:center;
+  }
+  #final h2 { font-size:10px; color:#ffdd00; margin-bottom:16px; line-height:1.8; }
+  #final p  { font-size:5px; color:#aaa; line-height:2.1; margin-bottom:20px; }
+  #final .cr { font-size:4px; color:#333; line-height:2.2; }
+  #final .replay { font-size:6px; color:#fff; margin-top:14px; animation:blink 1s step-end infinite; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="bg" width="360" height="640"></canvas>
+  <canvas id="main" width="360" height="640"></canvas>
+  <div id="scanlines"></div>
+
+  <!-- TITLE -->
+  <div id="title-screen">
+    <canvas id="starcanvas" width="360" height="640" style="position:absolute;inset:0;"></canvas>
+    <h1>HAIL<br>MARY</h1>
+    <div class="sub">PROJETO GRAÇA</div>
+    <div class="tap">[ TOQUE PARA INICIAR ]</div>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div class="hrow" id="hf"><span class="hlbl">COMBUSTÍVEL</span><div class="htrk"><div class="hfil" id="fuel-f" style="width:100%"></div></div><span class="hval" id="fuel-v">100%</span></div>
+    <div class="hrow" id="hd"><span class="hlbl">DISTÂNCIA</span><div class="htrk"><div class="hfil" id="dist-f" style="width:0%"></div></div><span class="hval" id="dist-v">0 UA</span></div>
+    <div class="hrow" id="hs"><span class="hlbl">LUZ SOLAR</span><div class="htrk"><div class="hfil" id="solar-f" style="width:100%"></div></div><span class="hval" id="solar-v">100%</span></div>
+  </div>
+
+  <!-- DIALOG -->
+  <div id="dialog">
+    <div id="dlg-speaker"></div>
+    <div id="dlg-text"></div>
+    <div id="dlg-tap">▶ TOQUE</div>
+  </div>
+  <div id="tap-continue"></div>
+
+  <!-- DPAD (flight) -->
+  <div id="dpad">
+    <div class="dpad-btn" id="btn-up">▲</div>
+    <div class="dpad-btn" id="btn-down">▼</div>
+    <div class="dpad-btn" id="btn-left">◀</div>
+    <div class="dpad-btn" id="btn-right">▶</div>
+    <div class="dpad-btn" id="btn-center" style="font-size:5px;color:#555;">D-PAD</div>
+  </div>
+  <div id="action-btns">
+    <div class="act-btn" id="btn-thrust">🚀<br>IMPULSO</div>
+  </div>
+
+  <!-- PUZZLE -->
+  <div id="puzzle">
+    <div id="pz-title"></div>
+    <div id="pz-desc"></div>
+    <div id="pz-grid"></div>
+    <div id="pz-fb"></div>
+    <button id="pz-confirm" onclick="confirmPuzzle()">CONFIRMAR</button>
+  </div>
+
+  <!-- FINAL -->
+  <div id="final">
+    <h2>MISSÃO<br>CUMPRIDA</h2>
+    <p>A sonda atravessa o vazio.<br>
+    12,4 anos-luz de distância,<br>
+    os astrofagos morrem.<br><br>
+    Dois seres — um humano<br>
+    e um eudário — escolheram<br>
+    salvar mundos que<br>
+    nunca mais veriam.<br><br>
+    A Terra continuou girando.</p>
+    <div class="cr">Baseado em "Projeto Hail Mary"<br>de Andy Weir</div>
+    <div class="replay">[ TOQUE PARA REINICIAR ]</div>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+//  AUDIO ENGINE  (Web Audio API / chipmusic)
+// ─────────────────────────────────────────────
+let AC, masterVol;
+function initAudio() {
+  if(AC) return;
+  AC = new (window.AudioContext || window.webkitAudioContext)();
+  masterVol = AC.createGain(); masterVol.gain.value = 0.18; masterVol.connect(AC.destination);
+}
+
+function note(freq, dur, type='square', vol=0.4, delay=0) {
+  if(!AC) return;
+  const t = AC.currentTime + delay;
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, t);
+  g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(vol, t+0.01);
+  g.gain.linearRampToValueAtTime(vol*0.6, t+dur*0.5); g.gain.linearRampToValueAtTime(0, t+dur);
+  o.connect(g); g.connect(masterVol); o.start(t); o.stop(t+dur+0.02);
+}
+function noise(dur, vol=0.1, delay=0) {
+  if(!AC) return;
+  const buf=AC.createBuffer(1,AC.sampleRate*dur,AC.sampleRate);
+  const d=buf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+  const src=AC.createBufferSource(), g=AC.createGain(), t=AC.currentTime+delay;
+  src.buffer=buf; g.gain.setValueAtTime(vol,t); g.gain.linearRampToValueAtTime(0,t+dur);
+  src.connect(g); g.connect(masterVol); src.start(t); src.stop(t+dur);
+}
+
+let bgmTimer=null;
+function stopBGM(){ if(bgmTimer){clearInterval(bgmTimer);bgmTimer=null;} }
+
+function playTitleBGM(){
+  stopBGM(); let i=0;
+  const s=[261,293,329,349,392,440,493,523];
+  bgmTimer=setInterval(()=>{ note(s[i%8],0.22,'square',0.3); note(s[i%8]*0.5,0.22,'triangle',0.15); if(i%4===0) note(65,0.18,'square',0.18); i++; },230);
+}
+function playSpaceBGM(){
+  stopBGM(); let i=0;
+  const m=[196,220,246,261,220,196,174,196];
+  bgmTimer=setInterval(()=>{ note(m[i%8],0.45,'triangle',0.25); note(m[i%8]*0.5,0.45,'sine',0.12); if(i%2===0) note(98,0.4,'triangle',0.08); i++; },480);
+}
+function playDramaBGM(){
+  stopBGM(); let i=0;
+  const m=[440,493,523,493,440,415,440,493];
+  bgmTimer=setInterval(()=>{ note(m[i%8],0.28,'square',0.25); note(m[i%8]*0.5,0.28,'triangle',0.12); note(130,0.25,'square',0.12); i++; },300);
+}
+function playPuzzleBGM(){
+  stopBGM(); let i=0;
+  const m=[329,349,392,349,329,293,329,349];
+  bgmTimer=setInterval(()=>{ note(m[i%8],0.35,'triangle',0.22); note(m[i%8]*2,0.1,'square',0.07); if(i%3===0) note(164,0.3,'triangle',0.10); i++; },380);
+}
+function playVictoryBGM(){
+  stopBGM();
+  const f=[523,523,523,659,523,659,783];
+  f.forEach((v,i)=>{ note(v, i===6?0.7:0.25,'square',0.38,i*0.28); note(v*0.5,i===6?0.7:0.25,'triangle',0.18,i*0.28); });
+}
+function sfxBeep(){ note(880,0.06,'square',0.25); }
+function sfxWrong(){ note(180,0.18,'sawtooth',0.28); }
+function sfxCorrect(){ [523,659,783].forEach((f,i)=>note(f,0.3,'square',0.22,i*0.06)); }
+function sfxEngine(){ noise(0.1,0.12); note(82,0.1,'sawtooth',0.18); }
+function sfxLaunch(){ for(let i=0;i<8;i++){noise(0.08,0.18,i*0.07); note(110+i*22,0.08,'sawtooth',0.22,i*0.07);} }
+
+// ─────────────────────────────────────────────
+//  CANVAS SETUP
+// ─────────────────────────────────────────────
+const W=360, H=640;
+const bgC   = document.getElementById('bg');
+const mainC = document.getElementById('main');
+const starC = document.getElementById('starcanvas');
+const bg  = bgC.getContext('2d');   bg.imageSmoothingEnabled=false;
+const ctx = mainC.getContext('2d'); ctx.imageSmoothingEnabled=false;
+const sCtx= starC.getContext('2d'); sCtx.imageSmoothingEnabled=false;
+
+// ─────────────────────────────────────────────
+//  STARS
+// ─────────────────────────────────────────────
+const STARS=[];
+for(let i=0;i<200;i++) STARS.push({
+  x:Math.random()*W, y:Math.random()*H,
+  r:Math.random()<0.7?1:2,
+  b:0.3+Math.random()*0.7, tw:Math.random()*Math.PI*2, sp:0.4+Math.random()*2
+});
+
+function drawStars(c, t, scroll=0){
+  c.fillStyle='#050510'; c.fillRect(0,0,W,H);
+  STARS.forEach(s=>{
+    const tw=0.5+0.5*Math.sin(s.tw+t*s.sp*0.5);
+    c.fillStyle=`rgba(255,255,255,${s.b*tw})`;
+    const sx=((s.x-scroll*s.sp*0.04)%W+W)%W;
+    c.fillRect(Math.round(sx),Math.round(s.y),s.r,s.r);
+  });
+}
+
+let starT=0;
+function animStars(){ starT+=0.016; drawStars(sCtx,starT,starT*8); requestAnimationFrame(animStars); }
+animStars();
+
+// ─────────────────────────────────────────────
+//  ISO HELPERS  (portrait: wider tiles, lower origin)
+// ─────────────────────────────────────────────
+// In portrait we use a flatter iso view, origin near top-center
+function iso(tx,ty,tz=0){ return { x: W/2+(tx-ty)*28, y: 200+(tx+ty)*14-tz*18 }; }
+
+function tile(cx,cy,top,side,w=28,h=14){
+  ctx.fillStyle=top;
+  ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+w,cy+h); ctx.lineTo(cx,cy+h*2); ctx.lineTo(cx-w,cy+h); ctx.closePath(); ctx.fill();
+  ctx.fillStyle=side;
+  ctx.beginPath(); ctx.moveTo(cx+w,cy+h); ctx.lineTo(cx+w,cy+h+10); ctx.lineTo(cx,cy+h*2+10); ctx.lineTo(cx,cy+h*2); ctx.closePath(); ctx.fill();
+  ctx.fillStyle=shade(side,-28);
+  ctx.beginPath(); ctx.moveTo(cx-w,cy+h); ctx.lineTo(cx-w,cy+h+10); ctx.lineTo(cx,cy+h*2+10); ctx.lineTo(cx,cy+h*2); ctx.closePath(); ctx.fill();
+}
+
+function shade(hex,a){ let r=parseInt(hex.slice(1,3),16)+a,g=parseInt(hex.slice(3,5),16)+a,b=parseInt(hex.slice(5,7),16)+a; return `#${clamp(r)}${clamp(g)}${clamp(b)}`; }
+function clamp(n){ return Math.max(0,Math.min(255,n)).toString(16).padStart(2,'0'); }
+
+// ─────────────────────────────────────────────
+//  SPRITE DRAWERS
+// ─────────────────────────────────────────────
+function drawGrace(cx,cy,t){
+  ctx.save(); ctx.translate(cx,cy);
+  const b=Math.sin(t)*2;
+  ctx.fillStyle='#8899bb'; ctx.fillRect(-5,-16+b,10,18);
+  ctx.fillStyle='#aaccdd'; ctx.fillRect(-6,-28+b,12,14);
+  ctx.fillStyle='rgba(140,190,240,0.45)'; ctx.fillRect(-4,-26+b,8,10);
+  ctx.fillStyle='#8899bb'; ctx.fillRect(-10,-14+b,4,10); ctx.fillRect(6,-14+b,4,10);
+  ctx.fillStyle='#667788'; ctx.fillRect(-5,2+b,4,8); ctx.fillRect(1,2+b,4,8);
+  ctx.restore();
+}
+
+function drawRocky(cx,cy,t){
+  ctx.save(); ctx.translate(cx,cy);
+  const b=Math.sin(t*2)*2;
+  ctx.strokeStyle='#cc8844'; ctx.lineWidth=2;
+  for(let i=0;i<5;i++){
+    ctx.beginPath(); ctx.moveTo(-7,b); ctx.lineTo(-16+i*2,10+b); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(7,b);  ctx.lineTo(16-i*2,10+b); ctx.stroke();
+  }
+  ctx.fillStyle='#cc8844'; ctx.fillRect(-9,-7+b,18,14);
+  ctx.fillStyle='#ddaa66'; ctx.fillRect(-6,-17+b,12,12);
+  ctx.fillStyle='#ff6600'; ctx.fillRect(-5,-14+b,3,3); ctx.fillRect(2,-14+b,3,3);
+  ctx.fillStyle='#664422'; ctx.fillRect(-3,-5+b,6,3);
+  ctx.restore();
+}
+
+function drawShip(cx,cy,sc=1){
+  ctx.save(); ctx.translate(cx,cy); ctx.scale(sc,sc);
+  // portrait: ship faces upward
+  ctx.fillStyle='#8899bb'; ctx.fillRect(-14,-22,28,36);
+  ctx.fillStyle='#aaddff'; ctx.fillRect(-8,-28,16,12);
+  ctx.fillStyle='#667788'; ctx.fillRect(-18,-6,7,12); ctx.fillRect(11,-6,7,12);
+  ctx.fillStyle='#ff8800'; ctx.fillRect(-16,12,6,8); ctx.fillRect(10,12,6,8);
+  ctx.fillStyle='#fff'; ctx.fillRect(-10,-20,4,3);
+  ctx.restore();
+}
+
+function drawThrust(cx,cy,on){
+  if(!on) return;
+  ctx.fillStyle='#ff8800'; ctx.fillRect(cx-4,cy+14,8,10+Math.random()*8|0);
+  ctx.fillStyle='#ffdd00'; ctx.fillRect(cx-2,cy+14,4,6+Math.random()*4|0);
+}
+
+function drawAstrofago(cx,cy,t){
+  ctx.save(); ctx.translate(cx,cy);
+  const p=1+0.12*Math.sin(t*3);
+  ctx.scale(p,p);
+  ctx.fillStyle='#ff6600'; ctx.beginPath(); ctx.arc(0,0,7,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#ffaa00'; ctx.beginPath(); ctx.arc(-2,-2,3,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle='#ff3300'; ctx.lineWidth=2;
+  for(let a=0;a<8;a++){
+    const ang=a*Math.PI/4+t*0.5, len=9+3*Math.sin(t*2+a);
+    ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(Math.cos(ang)*len,Math.sin(ang)*len); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawSun(cx,cy,health,t){
+  const r=50, p=1+0.04*Math.sin(t*1.5);
+  ctx.save(); ctx.translate(cx,cy);
+  ctx.globalAlpha=0.2; ctx.fillStyle=health>50?'#ffee88':'#ff8800';
+  ctx.beginPath(); ctx.arc(0,0,r*1.5*p,0,Math.PI*2); ctx.fill();
+  ctx.globalAlpha=0.4; ctx.fillStyle=health>50?'#ffdd00':'#ff4400';
+  ctx.beginPath(); ctx.arc(0,0,r*1.2*p,0,Math.PI*2); ctx.fill();
+  ctx.globalAlpha=1; ctx.fillStyle=health>50?'#ffee88':'#ff8800';
+  ctx.beginPath(); ctx.arc(0,0,r*p,0,Math.PI*2); ctx.fill();
+  if(health<80){
+    ctx.fillStyle=`rgba(80,20,0,${(80-health)/120})`;
+    for(let i=0;i<4;i++){
+      const a=i*Math.PI*0.5+t*0.2, rr=(20+i*7)*(1-health/200);
+      ctx.beginPath(); ctx.arc(Math.cos(a)*20,Math.sin(a)*20,rr,0,Math.PI*2); ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+function drawEarth(cx,cy,t){
+  ctx.save(); ctx.translate(cx,cy);
+  const r=24;
+  ctx.fillStyle='#1144bb'; ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#228833'; ctx.fillRect(-12,-7,10,16); ctx.fillRect(3,-10,8,12);
+  ctx.fillStyle='#ddeeff';
+  ctx.beginPath(); ctx.arc(0,-r+3,9,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(0,r-3,7,0,Math.PI*2); ctx.fill();
+  ctx.globalAlpha=0.18; ctx.fillStyle='#88ccff';
+  ctx.beginPath(); ctx.arc(0,0,r+4,0,Math.PI*2); ctx.fill();
+  ctx.globalAlpha=1;
+  ctx.restore();
+}
+
+function drawTauCeti(cx,cy,t){
+  const r=26, p=1+0.03*Math.sin(t*1.8);
+  ctx.save(); ctx.translate(cx,cy);
+  ctx.globalAlpha=0.2; ctx.fillStyle='#ffeecc';
+  ctx.beginPath(); ctx.arc(0,0,r*1.6*p,0,Math.PI*2); ctx.fill();
+  ctx.globalAlpha=1; ctx.fillStyle='#ffddaa';
+  ctx.beginPath(); ctx.arc(0,0,r*p,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#ffcc88';
+  ctx.beginPath(); ctx.arc(-3,-3,r*0.45,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+function drawPlanet(cx,cy,col,r,t){
+  ctx.save(); ctx.translate(cx,cy);
+  ctx.fillStyle=col; ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.beginPath(); ctx.arc(r*0.2,0,r,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='rgba(255,255,255,0.14)'; ctx.beginPath(); ctx.arc(-r*0.3,-r*0.3,r*0.4,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+// ─────────────────────────────────────────────
+//  SCENE RENDERERS
+// ─────────────────────────────────────────────
+let gT=0;
+
+// SCENE 1: Awaken — isometric cabin, portrait layout
+function renderAwaken(t){
+  ctx.fillStyle='#0a0a1a'; ctx.fillRect(0,0,W,H);
+  // Floor — 4x4 tiles, centered in portrait
+  for(let tx=0;tx<4;tx++) for(let ty=0;ty<4;ty++){
+    const {x,y}=iso(tx-1,ty-1);
+    tile(x,y,(tx+ty)%2?'#1a1a3a':'#141428','#0a0a20');
+  }
+  // Left cryo pod (crew - dead)
+  const p1=iso(0.2,0.5);
+  ctx.fillStyle='#334466'; ctx.fillRect(p1.x-16,p1.y-40,32,55);
+  ctx.fillStyle='#aaccff'; ctx.globalAlpha=0.4; ctx.fillRect(p1.x-12,p1.y-36,24,44); ctx.globalAlpha=1;
+  ctx.fillStyle='#557799'; ctx.fillRect(p1.x-14,p1.y-38,28,10);
+  // Right cryo pod (Grace — open)
+  const p2=iso(1.8,0.5);
+  ctx.fillStyle='#334466'; ctx.fillRect(p2.x-16,p2.y-40,32,55);
+  ctx.fillStyle='#668844'; ctx.fillRect(p2.x-14,p2.y-40,28,12);
+  ctx.fillStyle='#557799'; ctx.fillRect(p2.x-14,p2.y-58,28,20);
+  // Control panel
+  const cp=iso(1,2.2);
+  ctx.fillStyle='#223344'; ctx.fillRect(cp.x-30,cp.y-18,60,28);
+  for(let i=0;i<6;i++){
+    ctx.fillStyle=Math.sin(t*3+i)>0?(i%2?'#ff0000':'#00cc00'):(i%2?'#882200':'#006600');
+    ctx.fillRect(cp.x-22+i*9,cp.y-10,6,5);
+  }
+  ctx.fillStyle='#aaddff'; ctx.font='4px "Press Start 2P"';
+  ctx.fillText('SISTEMAS OK',cp.x-22,cp.y+6);
+  // Grace character
+  const gr=iso(1,1.1);
+  drawGrace(gr.x,gr.y-8,t);
+  // Fade-in from white
+  if(t<3){ ctx.fillStyle=`rgba(255,255,255,${Math.max(0,1-t/3)})`; ctx.fillRect(0,0,W,H); }
+  // Scene label
+  ctx.fillStyle='#334'; ctx.font='4px "Press Start 2P"';
+  ctx.fillText('NAVE HAIL MARY — DIA 1',10,H-8);
+}
+
+// SCENE 2: Briefing — portrait: Earth top, Sun (infected) below
+function renderBriefing(t){
+  drawStars(ctx,t);
+  // Earth (top portion)
+  drawEarth(W/2,120,t);
+  ctx.fillStyle='#00aaff'; ctx.font='5px "Press Start 2P"'; ctx.textAlign='center';
+  ctx.fillText('TERRA',W/2,155);
+  // Arrow down
+  ctx.fillStyle='#ff4400'; ctx.font='10px serif'; ctx.fillText('▼',W/2,185);
+  ctx.font='5px "Press Start 2P"'; ctx.fillStyle='#ff4400';
+  ctx.fillText('SOL: 40% ENERGIA',W/2,200);
+  // Sun (infected) — center
+  drawSun(W/2,310,40,t);
+  // Astrofagos orbiting sun
+  for(let i=0;i<5;i++){
+    const a=i*Math.PI*0.4+t*0.35, d=70+Math.sin(t+i)*6;
+    drawAstrofago(W/2+Math.cos(a)*d, 310+Math.sin(a)*d*0.45, t+i);
+  }
+  ctx.fillStyle='#ff4400'; ctx.font='5px "Press Start 2P"';
+  ctx.fillText('ASTROFAGO',W/2,390);
+  ctx.fillStyle='#888'; ctx.font='4px "Press Start 2P"';
+  ctx.fillText('PARASITA SOLAR',W/2,404);
+  ctx.textAlign='left';
+}
+
+// SCENE 3: Flight — portrait: ship moves up toward Tau Ceti
+let shipX=W/2, shipY=H*0.72;
+let shipVX=0, shipVY=0;
+let flightProg=0, fuel=100, solar=100;
+let thrustOn=false;
+let flightActive=false;
+
+function renderFlight(t){
+  drawStars(ctx,t,flightProg*600);
+  // Tau Ceti — grows at top as we approach
+  const tcS=0.08+flightProg*0.92;
+  ctx.save(); ctx.translate(W/2,80); ctx.scale(tcS,tcS); ctx.translate(-W/2,-80);
+  drawTauCeti(W/2,80,t);
+  ctx.restore();
+  if(flightProg>0.04){
+    ctx.fillStyle='#ffcc44'; ctx.font='5px "Press Start 2P"'; ctx.textAlign='center';
+    ctx.fillText('TAU CETI',W/2,80+32*tcS+10); ctx.textAlign='left';
+  }
+  // Planet appears near end
+  if(flightProg>0.72){
+    const pA=Math.min(1,(flightProg-0.72)/0.28);
+    ctx.globalAlpha=pA;
+    drawPlanet(W/2,200+pA*30,'#7755aa',12+pA*22,t);
+    ctx.fillStyle='#888'; ctx.font='4px "Press Start 2P"'; ctx.textAlign='center';
+    ctx.fillText('TAU CETI-E',W/2,240+pA*30); ctx.textAlign='left';
+    ctx.globalAlpha=1;
+  }
+  // Astrofago cloud (fades as we leave solar system)
+  const aA=Math.max(0,1-flightProg*4);
+  if(aA>0){
+    ctx.globalAlpha=aA;
+    [[W*0.2,H*0.6],[W*0.8,H*0.55],[W*0.5,H*0.7],[W*0.15,H*0.78],[W*0.85,H*0.72]].forEach(([ax,ay],i)=>{
+      drawAstrofago(ax,ay-flightProg*80,t+i);
+    });
+    ctx.globalAlpha=1;
+  }
+  // Ship
+  drawShip(shipX,shipY);
+  drawThrust(shipX,shipY,thrustOn);
+  // Thrust flame top when going up
+  if(thrustOn){
+    ctx.fillStyle='rgba(255,136,0,0.7)';
+    ctx.fillRect(shipX-3,shipY+14,6,10+Math.random()*8|0);
+  }
+}
+
+function updateFlight(){
+  if(!flightActive) return;
+  // Virtual dpad state handled by touch buttons
+  const ACCEL=0.12, FRIC=0.93, MAXV=2.2;
+  if(vKeys.up)    shipVY-=ACCEL;
+  if(vKeys.down)  shipVY+=ACCEL;
+  if(vKeys.left)  shipVX-=ACCEL;
+  if(vKeys.right) shipVX+=ACCEL;
+  thrustOn=vKeys.thrust;
+  if(thrustOn && fuel>0){
+    shipVY-=ACCEL*1.8; // thrust = upward in portrait
+    fuel=Math.max(0,fuel-0.08);
+    sfxEngine();
+    flightProg+=0.0009;
+  }
+  flightProg+=0.00014;
+  shipVX=Math.max(-MAXV,Math.min(MAXV,shipVX));
+  shipVY=Math.max(-MAXV,Math.min(MAXV,shipVY));
+  shipVX*=FRIC; shipVY*=FRIC;
+  shipX=Math.max(20,Math.min(W-20,shipX+shipVX));
+  shipY=Math.max(H*0.2,Math.min(H*0.85,shipY+shipVY));
+  // HUD
+  const fp=Math.min(1,flightProg);
+  document.getElementById('fuel-f').style.width=fuel+'%';
+  document.getElementById('fuel-v').textContent=Math.round(fuel)+'%';
+  document.getElementById('dist-f').style.width=(fp*100)+'%';
+  const ua=Math.round(fp*118000);
+  document.getElementById('dist-v').textContent=ua>9999?Math.round(ua/206265*100)/100+' AL':ua+' UA';
+  solar=Math.max(0,100-fp*98);
+  document.getElementById('solar-f').style.width=solar+'%';
+  document.getElementById('solar-v').textContent=Math.round(solar)+'%';
+}
+
+// SCENE 4: Rocky
+let puzzleSolved=false;
+function renderRocky(t){
+  ctx.fillStyle='#0d0820'; ctx.fillRect(0,0,W,H);
+  // Rocky's ship floor (hexagonal-ish)
+  for(let tx=0;tx<5;tx++) for(let ty=0;ty<3;ty++){
+    const {x,y}=iso(tx-2,ty);
+    tile(x,y+(ty%2*7),'#1a0d28','#110820',24,12);
+  }
+  // Characters — portrait: Rocky top, Grace bottom
+  drawRocky(W/2,H*0.3,t);
+  drawGrace(W/2,H*0.58,t);
+  // Communication symbols between them
+  if(!puzzleSolved){
+    const syms=['◈','⊕','◉','⬡'];
+    syms.forEach((s,i)=>{
+      ctx.fillStyle=`hsl(${i*60+t*30},80%,60%)`;
+      ctx.font='13px serif';
+      ctx.textAlign='center';
+      ctx.fillText(s, W/2-30+i*20, H*0.46+Math.sin(t*2+i)*4);
+    });
+  } else {
+    ctx.fillStyle='#00ff88'; ctx.font='5px "Press Start 2P"'; ctx.textAlign='center';
+    ctx.fillText('COMUNICAÇÃO',W/2,H*0.46);
+    ctx.fillText('ESTABELECIDA',W/2,H*0.46+12);
+  }
+  ctx.fillStyle='#cc8844'; ctx.font='5px "Press Start 2P"'; ctx.textAlign='center';
+  ctx.fillText('ROCKY',W/2,H*0.3+38);
+  ctx.fillStyle='#00aaff'; ctx.fillText('RYLAND GRACE',W/2,H*0.58+38);
+  ctx.textAlign='left';
+}
+
+// SCENE 5: Launch
+let probeT2=0, rockyT2=0, rockyLeaving=false;
+function renderLaunch(t){
+  drawStars(ctx,t,t*20);
+  drawTauCeti(W*0.22,H*0.14,t);
+  drawPlanet(W/2,H*0.35,'#7755aa',50,t);
+  ctx.fillStyle='#888'; ctx.font='5px "Press Start 2P"'; ctx.textAlign='center';
+  ctx.fillText('TAU CETI-E',W/2,H*0.35+62);
+  // Probe launches upward
+  if(probeT2>0){
+    const py=H*0.35-probeT2*H*0.5;
+    const px=W/2+probeT2*40;
+    ctx.save(); ctx.translate(px,py);
+    ctx.fillStyle='#aaddff'; ctx.fillRect(-6,-3,12,6);
+    ctx.fillStyle='#ffdd00'; ctx.fillRect(-2,-5,4,4); ctx.fillRect(-2,1,4,4);
+    ctx.restore();
+    ctx.strokeStyle='rgba(0,200,200,0.4)'; ctx.lineWidth=1;
+    ctx.setLineDash([2,4]);
+    ctx.beginPath(); ctx.moveTo(W/2,H*0.35); ctx.lineTo(px,py); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle='#00cccc'; ctx.font='4px "Press Start 2P"'; ctx.textAlign='center';
+    ctx.fillText('→ TERRA (12,4 AL)',W/2+20,py-8);
+  }
+  // Rocky's ship leaves (downward)
+  if(rockyLeaving){
+    const ry=H*0.55+rockyT2*200;
+    drawShip(W/2-60,ry,0.85);
+    ctx.fillStyle='#cc8844'; ctx.font='4px "Press Start 2P"'; ctx.textAlign='center';
+    ctx.fillText('ROCKY → EUDÁRIA',W/2-60,ry+30);
+  }
+  ctx.textAlign='left';
+}
+
+// ─────────────────────────────────────────────
+//  DIALOG SYSTEM
+// ─────────────────────────────────────────────
+let dlgQueue=[], dlgCur=null, dlgIdx=0;
+
+function showDialog(spk,txt){
+  return new Promise(res=>{
+    dlgQueue.push({spk,txt,res});
+    if(!dlgCur) nextDlg();
+  });
+}
+function nextDlg(){
+  if(!dlgQueue.length){ document.getElementById('dialog').style.display='none'; document.getElementById('tap-continue').style.display='none'; dlgCur=null; return; }
+  dlgCur=dlgQueue.shift(); dlgIdx=0;
+  const dlg=document.getElementById('dialog');
+  dlg.style.display='block';
+  document.getElementById('tap-continue').style.display='block';
+  document.getElementById('dlg-speaker').textContent=dlgCur.spk;
+  document.getElementById('dlg-speaker').style.color=
+    dlgCur.spk==='GRACE'||dlgCur.spk==='GRACE (MEMÓRIA)'?'#00aaff':
+    dlgCur.spk==='ROCKY'?'#cc8844':
+    dlgCur.spk==='SISTEMA'?'#ff4444':'#ffdd00';
+  document.getElementById('dlg-text').textContent='';
+}
+function updateDlg(){
+  if(!dlgCur) return;
+  if(dlgIdx<dlgCur.txt.length){
+    dlgIdx=Math.min(dlgIdx+2,dlgCur.txt.length);
+    document.getElementById('dlg-text').textContent=dlgCur.txt.slice(0,dlgIdx);
+    if(dlgIdx%4===0) sfxBeep();
+  }
+}
+function advanceDlg(){
+  if(!dlgCur) return;
+  if(dlgIdx<dlgCur.txt.length){ dlgIdx=dlgCur.txt.length; document.getElementById('dlg-text').textContent=dlgCur.txt; return; }
+  const r=dlgCur.res; dlgCur=null; nextDlg(); r();
+}
+
+// ─────────────────────────────────────────────
+//  PUZZLE
+// ─────────────────────────────────────────────
+let pzSelected=[], pzCallback=null, pzAttempts=0;
+const PZ={
+  title:'DECIFRANDO ROCKY',
+  desc:'Rocky emite 4 padrões de vibração.\nSelecione os 2 que correspondem\nao metabolismo do Astrofago.',
+  cells:[
+    {icon:'⚡',label:'ELÉTRONS\nLIVRES',  id:'e',   ok:false},
+    {icon:'🌡',label:'RADIAÇÃO\nINFRAVERMELHA', id:'ir',  ok:true},
+    {icon:'💎',label:'CRISTAL\nDE GELO',  id:'ice', ok:false},
+    {icon:'⚗',label:'ÁCIDO\nPIRÚVICO',   id:'pyr', ok:false},
+    {icon:'☀',label:'FÓTONS\nESTELARES', id:'ph',  ok:true},
+    {icon:'🔬',label:'ENZIMA\nATP',       id:'atp', ok:false},
+    {icon:'🌀',label:'CAMPO\nMAGNÉTICO', id:'mag', ok:false},
+    {icon:'💧',label:'ÁGUA\nLÍQUIDA',    id:'h2o', ok:false},
+  ],
+  need:2, okIds:['ir','ph']
+};
+
+function showPuzzle(){
+  return new Promise(res=>{
+    pzCallback=res; pzSelected=[];
+    document.getElementById('pz-title').textContent=PZ.title;
+    document.getElementById('pz-desc').textContent=PZ.desc;
+    document.getElementById('pz-fb').textContent='';
+    const grid=document.getElementById('pz-grid'); grid.innerHTML='';
+    PZ.cells.forEach(c=>{
+      const el=document.createElement('div'); el.className='pz-cell'; el.dataset.id=c.id;
+      el.innerHTML=`<span class="picon">${c.icon}</span><span>${c.label}</span>`;
+      el.addEventListener('touchend',e=>{ e.preventDefault(); togglePz(el,c); },{passive:false});
+      el.addEventListener('click',()=>togglePz(el,c));
+      grid.appendChild(el);
+    });
+    document.getElementById('puzzle').style.display='block';
+    playPuzzleBGM();
+  });
+}
+function togglePz(el,c){
+  sfxBeep();
+  const i=pzSelected.indexOf(c.id);
+  if(i>=0){ pzSelected.splice(i,1); el.classList.remove('sel'); }
+  else{ if(pzSelected.length>=PZ.need) return; pzSelected.push(c.id); el.classList.add('sel'); }
+}
+function confirmPuzzle(){
+  if(pzSelected.length<PZ.need){ document.getElementById('pz-fb').textContent='Selecione '+PZ.need+' padrões!'; return; }
+  const ok=PZ.okIds.every(id=>pzSelected.includes(id))&&pzSelected.every(id=>PZ.okIds.includes(id));
+  if(ok){
+    sfxCorrect(); document.getElementById('pz-fb').style.color='#00ff88';
+    document.getElementById('pz-fb').textContent='✓ CORRETO!';
+    document.querySelectorAll('.pz-cell').forEach(el=>{ if(PZ.okIds.includes(el.dataset.id)) el.classList.add('ok'); });
+    puzzleSolved=true;
+    setTimeout(()=>{ document.getElementById('puzzle').style.display='none'; if(pzCallback) pzCallback(true); },1600);
+  } else {
+    sfxWrong(); pzAttempts++;
+    document.getElementById('pz-fb').style.color='#ff4444';
+    document.getElementById('pz-fb').textContent='Incorreto — Rocky nega com 5 braços. Tent.'+pzAttempts;
+    document.querySelectorAll('.pz-cell.sel').forEach(el=>{ if(!PZ.okIds.includes(el.dataset.id)){ el.classList.add('err'); setTimeout(()=>el.classList.remove('err','sel'),700); } });
+    pzSelected=[];
+  }
+}
+
+// ─────────────────────────────────────────────
+//  TOUCH CONTROLS
+// ─────────────────────────────────────────────
+const vKeys={up:false,down:false,left:false,right:false,thrust:false};
+
+function bindDpad(){
+  function bind(id,key){
+    const el=document.getElementById(id);
+    el.addEventListener('touchstart',e=>{e.preventDefault();vKeys[key]=true;el.classList.add('pressed');},{passive:false});
+    el.addEventListener('touchend',  e=>{e.preventDefault();vKeys[key]=false;el.classList.remove('pressed');},{passive:false});
+    el.addEventListener('touchcancel',e=>{vKeys[key]=false;el.classList.remove('pressed');});
+  }
+  bind('btn-up','up'); bind('btn-down','down'); bind('btn-left','left'); bind('btn-right','right');
+  const thr=document.getElementById('btn-thrust');
+  thr.addEventListener('touchstart',e=>{e.preventDefault();vKeys.thrust=true;thr.classList.add('pressed');},{passive:false});
+  thr.addEventListener('touchend',  e=>{e.preventDefault();vKeys.thrust=false;thr.classList.remove('pressed');},{passive:false});
+  thr.addEventListener('touchcancel',e=>{vKeys.thrust=false;thr.classList.remove('pressed');});
+}
+bindDpad();
+
+// ─────────────────────────────────────────────
+//  SCENE STATE MACHINE
+// ─────────────────────────────────────────────
+const SC={TITLE:'title',AWAKEN:'awaken',BRIEFING:'briefing',FLIGHT:'flight',ROCKY:'rocky',LAUNCH:'launch',FINAL:'final'};
+let scene=SC.TITLE, sceneStarted=false;
+
+function setScene(s){
+  scene=s; sceneStarted=false;
+  dlgQueue=[]; dlgCur=null;
+  document.getElementById('dialog').style.display='none';
+  document.getElementById('tap-continue').style.display='none';
+}
+
+function wait(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+async function runAwaken(){
+  playDramaBGM();
+  document.getElementById('hud').style.display='none';
+  document.getElementById('dpad').style.display='none';
+  document.getElementById('action-btns').style.display='none';
+  await wait(700);
+  await showDialog('SISTEMA','ALERTA: TRIPULANTE ACORDANDO...');
+  await showDialog('GRACE','...Onde estou? Não consigo me lembrar de nada.');
+  await showDialog('GRACE','Meu nome é Ryland Grace. Sou professor de ciências. Por que sei isso mas não sei onde estou?');
+  await showDialog('SISTEMA','NAVEGAÇÃO: 6,3 ANOS-LUZ DO SOL');
+  await showDialog('SISTEMA','TRIPULAÇÃO: 1 DE 3. OS OUTROS 2 FALHARAM.');
+  await showDialog('SISTEMA','[FLASHBACK — PROJETO HAIL MARY]');
+  setScene(SC.BRIEFING);
+}
+
+async function runBriefing(){
+  playDramaBGM();
+  await wait(500);
+  await showDialog('GRACE (MEMÓRIA)','Agora me lembro. O Sol estava morrendo.');
+  await showDialog('EVA STRATT','Grace, o astrofago consome energia solar. Em 30 anos: extinção.');
+  await showDialog('EVA STRATT','Tau Ceti — única estrela próxima não infectada. Ela tem a resposta.');
+  await showDialog('GRACE (MEMÓRIA)','Por que eu? Sou professor de ciências, não astronauta.');
+  await showDialog('EVA STRATT','Precisávamos de alguém que pensasse diferente. Você foi escolhido.');
+  await showDialog('GRACE (MEMÓRIA)','E se eu não voltar?');
+  await showDialog('EVA STRATT','"Hail Mary." Nossa única jogada de último recurso.');
+  await showDialog('SISTEMA','[FIM DO FLASHBACK — INICIANDO VOO]');
+  setScene(SC.FLIGHT);
+}
+
+async function runFlight(){
+  playSpaceBGM();
+  document.getElementById('hud').style.display='block';
+  document.getElementById('dpad').style.display='block';
+  document.getElementById('action-btns').style.display='block';
+  flightActive=true;
+  await showDialog('GRACE','Tau Ceti: 11,9 anos-luz. A nave viaja a 1/20 da velocidade da luz.');
+  await showDialog('GRACE','No vácuo não há freio — só inércia. Use o impulso com cuidado.');
+  while(flightProg<0.5) await wait(300);
+  await showDialog('GRACE','Metade do caminho. O Sol desapareceu dos instrumentos.');
+  while(flightProg<0.82) await wait(300);
+  await showDialog('GRACE','Tau Ceti-E à vista. Há energia estranha saindo daquele planeta...');
+  await showDialog('SISTEMA','CONTATO: NAVE DESCONHECIDA EM ÓRBITA');
+  await showDialog('GRACE','Não estou sozinho aqui. Uma outra nave?');
+  while(flightProg<0.99) await wait(100);
+  flightActive=false;
+  document.getElementById('hud').style.display='none';
+  document.getElementById('dpad').style.display='none';
+  document.getElementById('action-btns').style.display='none';
+  sfxLaunch();
+  setScene(SC.ROCKY);
+}
+
+async function runRockyScene(){
+  playPuzzleBGM();
+  await wait(400);
+  await showDialog('GRACE','A nave é biológica — feita de material orgânico.');
+  await showDialog('ROCKY','♦◈⊕◈♦ [sons metálicos e vibrações rítmicas]');
+  await showDialog('GRACE','Ele tenta se comunicar. Percussão com frequências distintas...');
+  await showDialog('GRACE','Ele me mostra tabelas de elementos. Matemática universal!');
+  await showDialog('SISTEMA','PUZZLE: Decifre os padrões de Rocky sobre o Astrofago.');
+  await showPuzzle();
+  await showDialog('ROCKY','◉◉◉ [vibração intensa — aprovação!]');
+  await showDialog('GRACE','Entendemos um ao outro! O astrofago usa luz infravermelha e fótons estelares como alimento.');
+  await showDialog('GRACE','E Tau Ceti tem espectro diferente — os astrofagos aqui são FRACOS. É isso!');
+  await showDialog('ROCKY','⬡◈⊕⬡ — [padrão: "solução / enviar / Terra"]');
+  await showDialog('GRACE','Se eu enviar astrofagos de Tau Ceti para a Terra, eles competirão com os astrofagos do Sol — e perderão!');
+  await showDialog('ROCKY','◉◉◉◉◉ [5 braços erguidos — acordo máximo!]');
+  await showDialog('SISTEMA','[PREPARANDO SONDA DE RETORNO → TERRA]');
+  setScene(SC.LAUNCH);
+}
+
+async function runLaunch(){
+  playVictoryBGM();
+  await wait(400);
+  await showDialog('GRACE','Coletamos os astrofagos de Tau Ceti-E. Eles mal sobrevivem aqui — o antídoto perfeito.');
+  await showDialog('GRACE','A sonda leva 12 anos para chegar. Mas chegará.');
+  await showDialog('ROCKY','♦♦◈◈◉ [padrão: "amigo / boa sorte / dois mundos"]');
+  await showDialog('GRACE','Rocky precisa voltar para Eudária. Os astrofagos também ameaçam a estrela dele.');
+  await showDialog('GRACE','Mas ele tem a solução agora. Nós dois temos.');
+  probeT2=0; rockyLeaving=true; rockyT2=0;
+  const lnch=setInterval(()=>{ probeT2=Math.min(1,probeT2+0.004); rockyT2=Math.min(1,rockyT2+0.003); if(probeT2>=1) clearInterval(lnch); },16);
+  await wait(2800);
+  await showDialog('GRACE','Lá vai ela. 12 anos. Mas a Terra terá a cura antes que o Sol apague.');
+  await showDialog('GRACE','Fiz o que vim fazer. Agora fico aqui, com Rocky, descobrindo o universo.');
+  await showDialog('SISTEMA','SONDA LANÇADA — ETA TERRA: 12,3 ANOS');
+  await showDialog('SISTEMA','MISSÃO HAIL MARY: CONCLUÍDA.');
+  setScene(SC.FINAL);
+}
+
+// ─────────────────────────────────────────────
+//  MAIN LOOP
+// ─────────────────────────────────────────────
+let lastT=0;
+function loop(ts){
+  const dt=(ts-lastT)/1000; lastT=ts; gT+=dt;
+  ctx.clearRect(0,0,W,H);
+  switch(scene){
+    case SC.AWAKEN:   renderAwaken(gT);   break;
+    case SC.BRIEFING: renderBriefing(gT); break;
+    case SC.FLIGHT:   renderFlight(gT); updateFlight(); break;
+    case SC.ROCKY:    renderRocky(gT);    break;
+    case SC.LAUNCH:   renderLaunch(gT);   break;
+    case SC.FINAL:    renderFinal(gT);    break;
+  }
+  updateDlg();
+  if(!sceneStarted){ sceneStarted=true; onSceneStart(); }
+  requestAnimationFrame(loop);
+}
+
+function renderFinal(t){
+  drawStars(ctx,t,t*4);
+  ctx.strokeStyle='rgba(0,200,200,0.25)'; ctx.lineWidth=1; ctx.setLineDash([3,6]);
+  ctx.beginPath(); ctx.moveTo(W/2,H*0.8); ctx.lineTo(W*0.8,0); ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function onSceneStart(){
+  switch(scene){
+    case SC.AWAKEN:   runAwaken();     break;
+    case SC.BRIEFING: runBriefing();   break;
+    case SC.FLIGHT:   runFlight();     break;
+    case SC.ROCKY:    runRockyScene(); break;
+    case SC.LAUNCH:   runLaunch();     break;
+    case SC.FINAL:
+      document.getElementById('final').style.display='flex';
+      stopBGM(); setTimeout(playVictoryBGM,600);
+      break;
+  }
+}
+
+// ─────────────────────────────────────────────
+//  GLOBAL TOUCH / TAP HANDLING
+// ─────────────────────────────────────────────
+function onTap(){
+  initAudio();
+  if(scene===SC.TITLE){
+    document.getElementById('title-screen').style.display='none';
+    setScene(SC.AWAKEN); return;
+  }
+  if(scene===SC.FINAL){
+    document.getElementById('final').style.display='none';
+    // reset
+    flightProg=0; fuel=100; solar=100;
+    shipX=W/2; shipY=H*0.72; shipVX=0; shipVY=0;
+    puzzleSolved=false; pzAttempts=0;
+    probeT2=0; rockyLeaving=false; rockyT2=0;
+    setScene(SC.AWAKEN); return;
+  }
+  advanceDlg();
+}
+
+document.getElementById('title-screen').addEventListener('touchend', e=>{ e.preventDefault(); onTap(); },{passive:false});
+document.getElementById('title-screen').addEventListener('click', onTap);
+document.getElementById('tap-continue').addEventListener('touchend', e=>{ e.preventDefault(); onTap(); },{passive:false});
+document.getElementById('tap-continue').addEventListener('click', onTap);
+document.getElementById('final').addEventListener('touchend', e=>{ e.preventDefault(); onTap(); },{passive:false});
+document.getElementById('final').addEventListener('click', onTap);
+
+// Keyboard fallback (desktop testing)
+document.addEventListener('keydown',e=>{
+  initAudio();
+  if(e.key==='ArrowUp'||e.key==='w') vKeys.up=true;
+  if(e.key==='ArrowDown'||e.key==='s') vKeys.down=true;
+  if(e.key==='ArrowLeft'||e.key==='a') vKeys.left=true;
+  if(e.key==='ArrowRight'||e.key==='d') vKeys.right=true;
+  if(e.key===' ') vKeys.thrust=true;
+  if(e.key==='Enter') onTap();
+});
+document.addEventListener('keyup',e=>{
+  if(e.key==='ArrowUp'||e.key==='w') vKeys.up=false;
+  if(e.key==='ArrowDown'||e.key==='s') vKeys.down=false;
+  if(e.key==='ArrowLeft'||e.key==='a') vKeys.left=false;
+  if(e.key==='ArrowRight'||e.key==='d') vKeys.right=false;
+  if(e.key===' ') vKeys.thrust=false;
+});
+
+// ─────────────────────────────────────────────
+//  BOOT
+// ─────────────────────────────────────────────
+playTitleBGM();
+requestAnimationFrame(ts=>{ lastT=ts; loop(ts); });
+</script>
+</body>
+</html>
